@@ -1,4 +1,11 @@
-<div align="center">
+---
+title: VisionCaption AI
+emoji: 🧠
+colorFrom: blue
+colorTo: purple
+sdk: docker
+pinned: false
+---<div align="center">
   <h1>👁️ Visionary AI</h1>
   <p><strong>Production-Grade Image Captioning System (CNN-LSTM)</strong></p>
   
