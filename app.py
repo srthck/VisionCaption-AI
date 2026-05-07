@@ -131,12 +131,11 @@ def main():
                     
                     # 5. Synthesize Audio
                     with st.spinner("Synthesizing audio..."):
-                        audio_path = synthesize_speech(final_caption)
-                        if audio_path and os.path.exists(audio_path):
+                        audio_data = synthesize_speech(final_caption)
+                        
+                        if audio_data:
                             st.markdown("**Audio Playback:**")
-                            with open(audio_path, "rb") as audio_file:
-                                audio_bytes = audio_file.read()
-                            st.audio(audio_bytes, format='audio/mp3')
+                            st.audio(audio_data, format="audio/mp3")
                         else:
                             st.warning("Audio narration is temporarily unavailable.")
                         
