@@ -6,7 +6,7 @@ from models.feature_extractor import FeatureExtractor
 from models.caption_model import CaptionModel
 from utils.image_processing import preprocess_image
 from utils.caption_generator import generate_caption, clean_caption
-from utils.audio_generator import synthesize_speech
+import streamlit.components.v1 as components
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -129,15 +129,36 @@ def main():
                     # Display Caption
                     st.markdown(f"<div class='caption-box'>\"{final_caption}\"</div>", unsafe_allow_html=True)
                     
-                    # 5. Synthesize Audio
-                    with st.spinner("Synthesizing audio..."):
-                        audio_data = synthesize_speech(final_caption)
+                    # 5. Client-Side Browser Narration (Web Speech API)
+                    st.markdown("**Audio Playback:**")
+                    
+                    # Escape caption for safe JavaScript injection
+                    safe_caption = final_caption.replace("'", "\\'").replace('"', '\\"')
+                    
+                    js_code = f"""
+                    <div style="display: flex; justify-content: flex-start;">
+                        <button onclick="speakCaption()" style="background-color: #3B82F6; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 600; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: background-color 0.3s;">
+                            🔊 Play Narration
+                        </button>
+                    </div>
+                    
+                    <script>
+                        function speakCaption() {{
+                            if ('speechSynthesis' in window) {{
+                                window.speechSynthesis.cancel(); // Stop any currently playing audio
+                                var msg = new SpeechSynthesisUtterance("{safe_caption}");
+                                msg.lang = "en-US";
+                                msg.rate = 1.0;
+                                window.speechSynthesis.speak(msg);
+                            }}
+                        }}
                         
-                        if audio_data:
-                            st.markdown("**Audio Playback:**")
-                            st.audio(audio_data, format="audio/mp3")
-                        else:
-                            st.warning("Audio narration is temporarily unavailable.")
+                        // Auto-play narration immediately when iframe renders
+                        setTimeout(speakCaption, 200);
+                    </script>
+                    """
+                    
+                    components.html(js_code, height=70)
                         
                 except Exception as e:
                     logger.error(f"Inference error: {str(e)}")
