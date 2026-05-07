@@ -36,5 +36,7 @@ def synthesize_speech(text: str) -> str:
         logger.info(f"Audio synthesized successfully at {filepath}")
         return filepath
     except Exception as e:
-        logger.error(f"Failed to synthesize audio: {str(e)}")
+        import streamlit as st
+        logger.error(f"Failed to synthesize audio: {str(e)}", exc_info=True)
+        st.error(f"TTS Debug Error: {e}")
         return None
