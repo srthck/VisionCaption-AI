@@ -134,7 +134,9 @@ def main():
                         audio_path = synthesize_speech(final_caption)
                         if audio_path and os.path.exists(audio_path):
                             st.markdown("**Audio Playback:**")
-                            st.audio(audio_path, format='audio/mp3')
+                            with open(audio_path, "rb") as audio_file:
+                                audio_bytes = audio_file.read()
+                            st.audio(audio_bytes, format='audio/mp3')
                         
                 except Exception as e:
                     logger.error(f"Inference error: {str(e)}")
