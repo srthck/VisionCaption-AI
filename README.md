@@ -5,7 +5,11 @@ colorFrom: blue
 colorTo: purple
 sdk: docker
 pinned: false
----<div align="center">
+---
+
+# VisionCaption AI
+
+CNN-LSTM based image captioning system with audio narration.<div align="center">
   <h1>👁️ Visionary AI</h1>
   <p><strong>Production-Grade Image Captioning System (CNN-LSTM)</strong></p>
   
