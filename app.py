@@ -1,89 +1,144 @@
+import os
 import streamlit as st
-import numpy as np
-import pickle
-import tensorflow as tf
-from tensorflow.keras.models import Model
-from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
-from tensorflow.keras.preprocessing.image import load_img, img_to_array
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-from tensorflow.keras.models import load_model
-from gtts import gTTS
+import logging
 
-# Load VGG16 model
-vgg_model = VGG16()
-vgg_model = Model(inputs=vgg_model.inputs, outputs=vgg_model.layers[-2].output)
+from models.feature_extractor import FeatureExtractor
+from models.caption_model import CaptionModel
+from utils.image_processing import preprocess_image
+from utils.caption_generator import generate_caption, clean_caption
+from utils.audio_generator import synthesize_speech
 
-# Load the trained image captioning model
-model = load_model('model.h5')
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Load the tokenizer
-with open('tokenizer.pkl', 'rb') as tokenizer_file:
-    tokenizer = pickle.load(tokenizer_file)
-    
-# Set custom web page title
-st.set_page_config(page_title="Caption Generator App", page_icon="📷")
+# Constants - Hardened for Cloud Execution Contexts
+from pathlib import Path
 
-# Streamlit app
-st.title("Image Caption Generator")
-st.markdown(
-    "Upload an image, and this app will generate a caption for it using a trained LSTM model."
+# .resolve() cuts through symlinks. .parent gets the exact folder of app.py.
+BASE_DIR = Path(__file__).resolve().parent
+ARTIFACTS_DIR = BASE_DIR / "artifacts"
+MODEL_PATH = ARTIFACTS_DIR / "model.h5"
+TOKENIZER_PATH = ARTIFACTS_DIR / "tokenizer.pkl"
+MAX_CAPTION_LENGTH = 35
+
+# Page config must be the first Streamlit command
+st.set_page_config(
+    page_title="Visionary - AI Image Captioning",
+    page_icon="👁️",
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-# Upload image
-uploaded_image = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
+# Custom CSS for a professional look
+st.markdown("""
+<style>
+    .reportview-container {
+        margin-top: -2em;
+    }
+    .stDeployButton {display:none;}
+    footer {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+    .title-text {
+        font-family: 'Inter', sans-serif;
+        font-weight: 700;
+        color: #1E1E1E;
+        text-align: left;
+        margin-bottom: 0px;
+    }
+    .subtitle-text {
+        font-family: 'Inter', sans-serif;
+        color: #6B7280;
+        text-align: left;
+        margin-bottom: 2rem;
+    }
+    .caption-box {
+        background-color: #F3F4F6;
+        padding: 20px;
+        border-radius: 10px;
+        border-left: 5px solid #3B82F6;
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #111827;
+        margin-top: 20px;
+        margin-bottom: 20px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# Process uploaded image
-if uploaded_image is not None:
-    # Display loading spinner while processing
-    with st.spinner("Generating caption..."):
-        # Load image
-        image = load_img(uploaded_image, target_size=(224, 224))
-        image = img_to_array(image)
-        image = image.reshape((1, image.shape[0], image.shape[1], image.shape[2]))
-        image = preprocess_input(image)
+@st.cache_resource(show_spinner=False)
+def load_feature_extractor():
+    """Loads the VGG16 model only once and caches it."""
+    return FeatureExtractor()
 
-        # Extract features using VGG16
-        image_features = vgg_model.predict(image, verbose=0)
+@st.cache_resource(show_spinner=False)
+def load_captioning_model():
+    """Loads the LSTM and Tokenizer only once and caches them."""
+    return CaptionModel(MODEL_PATH, TOKENIZER_PATH)
 
-        # Max caption length
-        max_caption_length = 35
+def main():
+    st.markdown("<h1 class='title-text'>Visionary AI</h1>", unsafe_allow_html=True)
+    st.markdown("<p class='subtitle-text'>CNN-LSTM based Image Captioning System</p>", unsafe_allow_html=True)
+    
+    # Initialize Models
+    with st.spinner("Loading deep learning models..."):
+        try:
+            feature_extractor = load_feature_extractor()
+            caption_model = load_captioning_model()
+        except Exception as e:
+            st.error(f"System Error: Could not initialize AI models. {str(e)}")
+            st.stop()
+
+    # Upload Section
+    st.markdown("### Upload an Image")
+    uploaded_image = st.file_uploader(
+        "Choose an image (JPG, JPEG, PNG)...", 
+        type=["jpg", "jpeg", "png"],
+        help="Upload a clear image for the best captioning results."
+    )
+
+    if uploaded_image is not None:
+        col1, col2 = st.columns([1, 1], gap="large")
         
-        # Define function to get word from index
-        def get_word_from_index(index, tokenizer):
-            return next(
-                (word for word, idx in tokenizer.word_index.items() if idx == index), None
-            )
+        with col1:
+            st.image(uploaded_image, caption="Uploaded Image", use_container_width=True)
+            
+        with col2:
+            st.markdown("### Analysis & Results")
+            with st.spinner("Analyzing image features and generating caption..."):
+                try:
+                    # Reset file pointer to ensure Pillow can read it after st.image
+                    uploaded_image.seek(0)
+                    
+                    # 1. Preprocess
+                    processed_image = preprocess_image(uploaded_image)
+                    
+                    # 2. Extract Features
+                    image_features = feature_extractor.extract(processed_image)
+                    
+                    # 3. Generate Caption
+                    raw_caption = generate_caption(
+                        caption_model=caption_model, 
+                        image_features=image_features, 
+                        max_length=MAX_CAPTION_LENGTH
+                    )
+                    
+                    # 4. Clean Caption
+                    final_caption = clean_caption(raw_caption)
+                    
+                    # Display Caption
+                    st.markdown(f"<div class='caption-box'>\"{final_caption}\"</div>", unsafe_allow_html=True)
+                    
+                    # 5. Synthesize Audio
+                    with st.spinner("Synthesizing audio..."):
+                        audio_path = synthesize_speech(final_caption)
+                        if audio_path and os.path.exists(audio_path):
+                            st.markdown("**Audio Playback:**")
+                            st.audio(audio_path, format='audio/mp3')
+                        
+                except Exception as e:
+                    logger.error(f"Inference error: {str(e)}")
+                    st.error(f"An error occurred during caption generation: {str(e)}")
 
-        # Generate caption using the model
-        def predict_caption(model, image_features, tokenizer, max_caption_length):
-            caption = "startseq"
-            for _ in range(max_caption_length):
-                sequence = tokenizer.texts_to_sequences([caption])[0]
-                sequence = pad_sequences([sequence], maxlen=max_caption_length)
-                yhat = model.predict([image_features, sequence], verbose=0)
-                predicted_index = np.argmax(yhat)
-                predicted_word = get_word_from_index(predicted_index, tokenizer)
-                caption += " " + predicted_word
-                if predicted_word is None or predicted_word == "endseq":
-                    break
-            return caption
-
-        # Generate caption
-        generated_caption = predict_caption(model, image_features, tokenizer, max_caption_length)
-
-        # Remove startseq and endseq
-        generated_caption = generated_caption.replace("startseq", "").replace("endseq", "")
-
-        st.subheader(generated_caption)
-
-    # Step 1: Generate the audio for the caption using gTTS
-        tts = gTTS(generated_caption, lang='en')
-        audio_path = "predicted_caption.mp3"
-        tts.save(audio_path)
-
-    # Step 2: Display the audio player before the image
-        st.audio(audio_path, format='audio/mp3')
-        st.markdown("Generated Caption")
-        st.subheader("Uploaded Image")
-        uploaded_image.seek(0)
-        st.image(uploaded_image)
+if __name__ == "__main__":
+    main()
