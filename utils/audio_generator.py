@@ -1,34 +1,37 @@
 import os
-import uuid
+import asyncio
+import tempfile
 import logging
-from gtts import gTTS
+import edge_tts
 
 logger = logging.getLogger(__name__)
 
-def synthesize_speech(text: str, output_dir: str = "assets") -> str:
+def synthesize_speech(text: str) -> str:
     """
-    Converts text to speech using Google TTS and saves it as an MP3 file.
-    Uses UUIDs to prevent file clashing in a concurrent web environment.
+    Converts text to speech using Microsoft Edge TTS and saves it as an MP3 file.
+    Uses tempfile to safely manage files in a concurrent web/Docker environment.
     
     Args:
         text: The text string to convert to audio.
-        output_dir: Directory where the audio file will be saved.
         
     Returns:
-        str: Path to the generated audio file, or None if failed.
+        str: Path to the generated temporary audio file, or None if failed.
     """
     try:
-        # Ensure output directory exists
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-            
-        # Generate a unique filename
-        filename = f"caption_audio_{uuid.uuid4().hex[:8]}.mp3"
-        filepath = os.path.join(output_dir, filename)
+        # Generate a secure temporary file
+        temp_dir = tempfile.gettempdir()
+        temp_fd, filepath = tempfile.mkstemp(suffix=".mp3", dir=temp_dir)
+        os.close(temp_fd)
         
-        # Synthesize and save
-        tts = gTTS(text, lang='en')
-        tts.save(filepath)
+        # Configure Edge TTS
+        voice = "en-US-AriaNeural"
+        communicate = edge_tts.Communicate(text, voice)
+        
+        # Safely run asyncio in Streamlit/Threaded environments
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(communicate.save(filepath))
+        loop.close()
         
         logger.info(f"Audio synthesized successfully at {filepath}")
         return filepath

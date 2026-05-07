@@ -137,6 +137,8 @@ def main():
                             with open(audio_path, "rb") as audio_file:
                                 audio_bytes = audio_file.read()
                             st.audio(audio_bytes, format='audio/mp3')
+                        else:
+                            st.warning("Audio narration is temporarily unavailable.")
                         
                 except Exception as e:
                     logger.error(f"Inference error: {str(e)}")
